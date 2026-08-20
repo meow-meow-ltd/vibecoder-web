@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - 'site/**'
+  schedule:
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions: {}
@@ -18,7 +20,7 @@ jobs:
   deploy:
     runs-on: [self-hosted, home, deploy]
     permissions:
-      contents: read
+      contents: write
       pages: write
       id-token: write
     environment:
@@ -28,6 +30,30 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Pull staged Flutter web build
+        shell: bash
+        run: |
+          WEB_DEPLOY_DIR="${RUNNER_TOOL_CACHE}/deployments/vibecoder-web"
+          if [ ! -f "${WEB_DEPLOY_DIR}/index.html" ]; then
+            echo 'No staged Flutter web build is available yet; deploying the current site.'
+            exit 0
+          fi
+
+          mkdir -p site
+          find site -mindepth 1 -delete
+          cp -R "${WEB_DEPLOY_DIR}/." site/
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- site
+          if git diff --cached --quiet; then
+            echo 'The public site already matches the staged build.'
+          else
+            SOURCE_COMMIT=$(<site/vibecoder-source-commit.txt)
+            git commit -m "Deploy Vibecoder web build ${SOURCE_COMMIT:0:7}"
+            git push origin main
+          fi
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
